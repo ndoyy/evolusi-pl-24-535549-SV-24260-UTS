@@ -22,6 +22,9 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts
 # Copy seluruh kode aplikasi
 COPY . .
 
+# HAPUS CACHE LARAVEL (PENTING - agar tidak refer ke Pail/dev packages)
+RUN rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php
+
 # Set permission untuk folder storage dan cache
 RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache
 
@@ -29,4 +32,4 @@ RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache
 EXPOSE 8000
 
 # Perintah menjalankan server
-CMD ["php", "artisan", "octane:frankenphp", "--host=0.0.0.0", "--port=8000"]
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
