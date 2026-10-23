@@ -1,24 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/Login.vue'
-import Mahasiswa from '../views/Mahasiswa.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    {
-      path: '/',
-      name: 'Login',
-      component: Login,
-    },
-    {
-      path: '/mahasiswa',
-      name: 'Mahasiswa',
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
-      component: () => import('../views/Mahasiswa.vue'),
-    },
+    { path: '/', name: 'login', component: Login },
+    { path: '/buku', name: 'buku', component: () => import('../views/BukuView.vue'), meta: { auth: true } },
   ],
+})
+
+router.beforeEach((to) => {
+  const loggedIn = !!localStorage.getItem('token')
+  if (to.meta.auth && !loggedIn) return { name: 'login' }
+  if (to.name === 'login' && loggedIn) return { name: 'buku' }
 })
 
 export default router
