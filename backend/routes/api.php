@@ -1,14 +1,14 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\MahasiswaController;
+use App\Http\Controllers\Api\BukuController;
 use Illuminate\Support\Facades\Route;
 
-// Route publik (tanpa token)
+// Satu-satunya endpoint publik
 Route::post('/login', [AuthController::class, 'login']);
 
-// Route yang dilindungi middleware Sanctum (butuh token)
+// Semua endpoint lain wajib token (Sanctum)
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/mahasiswa', [MahasiswaController::class, 'index']);
-    Route::post('/mahasiswa', [MahasiswaController::class, 'store']);
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::apiResource('buku', BukuController::class);
 });
