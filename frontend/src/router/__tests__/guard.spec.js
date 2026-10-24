@@ -25,4 +25,16 @@ describe('router guard', () => {
         await router.push('/') // user yang sudah login mencoba kembali ke halaman login
         expect(router.currentRoute.value.name).toBe('buku')
     })
+
+    it('alamat tidak dikenal tanpa token berakhir di halaman login', async () => {
+        await router.push('/halaman-ngawur')
+        expect(router.currentRoute.value.name).toBe('login')
+    })
+
+    it('alamat tidak dikenal dengan token berakhir di /buku', async () => {
+        localStorage.setItem('token', 'abc')
+        await router.push('/buku')
+        await router.push('/halaman-ngawur')
+        expect(router.currentRoute.value.name).toBe('buku')
+    })
 })

@@ -120,4 +120,36 @@ describe('BukuView.vue (CRUD arsip buku)', () => {
 
         expect(api.delete).not.toHaveBeenCalled()
     })
+
+    it('READ: menampilkan pesan galat jika API gagal dimuat', async () => {
+        api.get.mockRejectedValue(new Error('Network Error'))
+        const wrapper = mount(BukuView)
+        await flushPromises()
+
+        expect(wrapper.find('[role="alert"]').text()).toContain('Gagal memuat daftar buku')
+    })
+
+    it('DELETE: menampilkan pesan sukses setelah hapus', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true)
+        api.delete.mockResolvedValue({ data: {} })
+        const wrapper = mount(BukuView)
+        await flushPromises()
+
+        await wrapper.find('button.danger').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('Buku berhasil dihapus.')
+    })
+
+    it('DELETE: menampilkan pesan galat jika hapus gagal', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true)
+        api.delete.mockRejectedValue(new Error('500'))
+        const wrapper = mount(BukuView)
+        await flushPromises()
+
+        await wrapper.find('button.danger').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[role="alert"]').text()).toContain('Gagal menghapus buku')
+    })
 })
