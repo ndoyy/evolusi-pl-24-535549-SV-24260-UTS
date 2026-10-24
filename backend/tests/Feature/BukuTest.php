@@ -41,6 +41,26 @@ class BukuTest extends TestCase
             ->assertJsonCount(3, 'data');
     }
 
+    public function test_pencarian_menyaring_berdasarkan_judul_penulis_atau_isbn(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        Buku::factory()->create([
+            'judul' => 'Pemrograman Laravel', 'penulis' => 'Budi', 'isbn' => '9780000000001',
+        ]);
+        Buku::factory()->create([
+            'judul' => 'Sejarah Nusantara', 'penulis' => 'Sari', 'isbn' => '9780000000002',
+        ]);
+
+        $this->getJson('/api/buku?search=Laravel')
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.judul', 'Pemrograman Laravel');
+
+        $this->getJson('/api/buku?search=Sari')->assertJsonCount(1, 'data');
+        $this->getJson('/api/buku?search=9780000000002')->assertJsonCount(1, 'data');
+        $this->getJson('/api/buku?search=tidak-ada-yang-cocok')->assertJsonCount(0, 'data');
+    }
+
     public function test_bisa_menampilkan_satu_buku(): void
     {
         Sanctum::actingAs(User::factory()->create());
@@ -71,6 +91,15 @@ class BukuTest extends TestCase
             ->assertJsonValidationErrors(['judul', 'isbn']);
     }
 
+    public function test_tahun_terbit_di_masa_depan_ditolak_422(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->postJson('/api/buku', $this->payload(['tahun_terbit' => (int) date('Y') + 1]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['tahun_terbit']);
+    }
+
     public function test_isbn_harus_unik_422(): void
     {
         Sanctum::actingAs(User::factory()->create());
@@ -87,6 +116,26 @@ class BukuTest extends TestCase
         $this->putJson("/api/buku/{$buku->id}", $this->payload(['judul' => 'Judul Baru']))
             ->assertStatus(200)
             ->assertJsonPath('data.judul', 'Judul Baru');
+    }
+
+    public function test_mengubah_buku_dengan_isbn_sendiri_tidak_dianggap_duplikat(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $buku = Buku::factory()->create(['isbn' => '9786021234567']);
+
+        $this->putJson("/api/buku/{$buku->id}", $this->payload())
+            ->assertStatus(200);
+    }
+
+    public function test_bisa_mengubah_sebagian_field_dengan_patch(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $buku = Buku::factory()->create(['judul' => 'Judul Lama', 'penulis' => 'Penulis Tetap']);
+
+        $this->patchJson("/api/buku/{$buku->id}", ['judul' => 'Judul Baru'])
+            ->assertStatus(200)
+            ->assertJsonPath('data.judul', 'Judul Baru')
+            ->assertJsonPath('data.penulis', 'Penulis Tetap');
     }
 
     public function test_bisa_menghapus_buku(): void
