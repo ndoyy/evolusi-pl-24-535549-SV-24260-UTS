@@ -1,34 +1,43 @@
+# Nilai rahasia (APP_KEY, DB_PASSWORD) dibaca dari file .env di folder ini.
+# File .env tidak ikut di-commit; salin dari .env.example lalu isi.
 services:
   db:
     image: mysql:8.0
     container_name: uts_db
     environment:
-      MYSQL_DATABASE: db_uts
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ${DB_DATABASE:-uts_kepl}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?Isi DB_PASSWORD di file .env}
     volumes:
       - db_data:/var/lib/mysql
     ports:
       - "3307:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - app-network
 
   backend:
     build: ./backend
     container_name: uts_backend
+    command: sh -c "php artisan migrate --force --seed && php artisan serve --host=0.0.0.0 --port=8000"
     ports:
       - "8000:8000"
     environment:
-      - APP_ENV=local
-      - APP_DEBUG=true
-      - APP_KEY=base64:/XJXq+ejLMLpVBGuW+ZKrOfU5UabGVYPoGsRUkvI9BI=
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=uts-kepl
-      - DB_USERNAME=root
-      - DB_PASSWORD=root
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: ${APP_KEY:?Isi APP_KEY di file .env}
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-uts_kepl}
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD:?Isi DB_PASSWORD di file .env}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - app-network
 
