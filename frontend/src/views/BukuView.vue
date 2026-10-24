@@ -17,6 +17,7 @@
         </div>
       </div>
       <p v-if="pesan" class="muted">{{ pesan }}</p>
+      <p v-if="galat" class="error" role="alert">{{ galat }}</p>
       <div style="margin-top: 1rem; display: flex; gap: 0.5rem">
         <button type="submit" :disabled="saving">{{ editId ? 'Simpan Perubahan' : 'Tambah' }}</button>
         <button v-if="editId" type="button" class="secondary" @click="reset">Batal</button>
@@ -76,13 +77,17 @@ const search = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const pesan = ref('')
+const galat = ref('')
 let timer
 
 const fetchData = async () => {
   loading.value = true
+  galat.value = ''
   try {
     const { data } = await api.get('/buku', { params: { search: search.value || undefined } })
     daftarBuku.value = data.data
+  } catch {
+    galat.value = 'Gagal memuat daftar buku. Periksa koneksi lalu coba lagi.'
   } finally {
     loading.value = false
   }
@@ -95,6 +100,7 @@ const simpan = async () => {
   saving.value = true
   errors.value = {}
   pesan.value = ''
+  galat.value = ''
   try {
     if (editId.value) await api.put(`/buku/${editId.value}`, form)
     else await api.post('/buku', form)
@@ -103,7 +109,7 @@ const simpan = async () => {
     await fetchData()
   } catch (e) {
     if (e.response?.status === 422) errors.value = e.response.data.errors
-    else pesan.value = 'Terjadi kesalahan, coba lagi.'
+    else galat.value = 'Terjadi kesalahan, coba lagi.'
   } finally {
     saving.value = false
   }
@@ -113,8 +119,15 @@ const edit = (b) => { editId.value = b.id; Object.assign(form, b); window.scroll
 
 const hapus = async (b) => {
   if (!confirm(`Hapus buku "${b.judul}"?`)) return
-  await api.delete(`/buku/${b.id}`)
-  await fetchData()
+  galat.value = ''
+  pesan.value = ''
+  try {
+    await api.delete(`/buku/${b.id}`)
+    pesan.value = 'Buku berhasil dihapus.'
+    await fetchData()
+  } catch {
+    galat.value = 'Gagal menghapus buku, coba lagi.'
+  }
 }
 
 const logout = async () => {

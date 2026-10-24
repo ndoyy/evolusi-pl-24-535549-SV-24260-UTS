@@ -6,6 +6,8 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'login', component: Login },
     { path: '/buku', name: 'buku', component: () => import('../views/BukuView.vue'), meta: { auth: true } },
+    // Alamat yang tidak dikenal dikembalikan ke halaman awal
+    { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 
