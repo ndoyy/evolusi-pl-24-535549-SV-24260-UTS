@@ -1,35 +1,31 @@
-FROM dunglas/frankenphp
+# Versi PHP dikunci (bukan latest). 8.4.27 sudah memuat patch CVE-2026-109618 dan CVE-2026-109619.
+FROM php:8.4.27-cli-bookworm
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Composer dengan versi yang jelas
+COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
 
-# Install unzip dan ekstensi zip PHP (wajib untuk composer install)
-RUN apt-get update && apt-get install -y \
-    unzip \
-    libzip-dev \
-    && docker-php-ext-install zip \
+# unzip dan ekstensi PHP yang dibutuhkan (zip untuk composer, pdo_mysql untuk database)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        unzip \
+        libzip-dev \
+    && docker-php-ext-install zip pdo_mysql \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy file composer terlebih dahulu untuk Layer Caching
+# Salin composer.json dan composer.lock lebih dulu agar layer dependensi bisa di-cache
 COPY composer.json composer.lock ./
+RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interaction
 
-# Install dependensi tanpa dev
-RUN composer install --no-dev --optimize-autoloader --no-scripts
-
-# Copy seluruh kode aplikasi
+# Baru salin kode aplikasi
 COPY . .
 
-# HAPUS CACHE LARAVEL (PENTING - agar tidak refer ke Pail/dev packages)
-RUN rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php
+# Bangun ulang autoload untuk kode aplikasi, hapus cache Laravel yang merujuk paket dev,
+# lalu atur izin folder storage dan cache
+RUN composer dump-autoload --no-dev --optimize --no-scripts \
+    && rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php \
+    && chown -R www-data:www-data storage bootstrap/cache
 
-# Set permission untuk folder storage dan cache
-RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache
-
-# Expose port yang digunakan FrankenPHP
 EXPOSE 8000
 
-# Perintah menjalankan server
 CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

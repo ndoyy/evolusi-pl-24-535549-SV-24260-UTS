@@ -2,59 +2,98 @@ name: CI/CD Pipeline UTS
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ '**' ]
   pull_request:
     branches: [ main, dev ]
+
+# Batalkan run lama pada branch yang sama agar tidak menumpuk
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend-test:
     name: Backend Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: mbstring, xml, ctype, iconv, mysql, pdo_mysql, zip
-          
+          # phpunit.xml memakai SQLite in-memory, jadi pdo_sqlite wajib ada
+          extensions: mbstring, xml, ctype, iconv, zip, pdo_sqlite, sqlite3
+          coverage: none
+          tools: composer:v2
+
+      - name: Pastikan PHP sudah memuat patch keamanan
+        # Perbaikan CVE-2026-109618 dan CVE-2026-109619 (RCE): 8.2.35, 8.3.36, 8.4.27, 8.5.12
+        run: |
+          php -v
+          php -r '
+          $min = ["8.2" => "8.2.35", "8.3" => "8.3.36", "8.4" => "8.4.27", "8.5" => "8.5.12"];
+          $cabang = PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;
+          if (!isset($min[$cabang]) || version_compare(PHP_VERSION, $min[$cabang], "<")) {
+              fwrite(STDERR, "PHP " . PHP_VERSION . " belum memuat patch keamanan terbaru.\n");
+              exit(1);
+          }
+          echo "PHP " . PHP_VERSION . " sudah ter-patch.\n";
+          '
+
+      - name: Ambil direktori cache Composer
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache dependensi Composer
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: composer-
+
       - name: Copy .env
         run: cp backend/.env.example backend/.env
-        
+
       - name: Install Dependencies
         working-directory: backend
-        run: composer install --no-interaction --prefer-dist
-        
+        run: composer install --no-interaction --prefer-dist --no-progress
+
       - name: Generate App Key
         working-directory: backend
         run: php artisan key:generate
-        
+
       - name: Run Tests
         working-directory: backend
         run: php artisan test
 
-  frontend-build:
-    name: Frontend Build
+  frontend-test-build:
+    name: Frontend Test & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-          
+
       - name: Install Dependencies
         working-directory: frontend
         run: npm ci
-        
+
+      - name: Unit Test
+        working-directory: frontend
+        run: npm test
+
       - name: Build
         working-directory: frontend
         run: npm run build
-        
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -63,9 +102,10 @@ jobs:
 
   deploy-docker:
     name: Build & Push Docker Image
-    needs: [backend-test, frontend-build]
-    if: github.ref == 'refs/heads/main'
+    needs: [backend-test, frontend-test-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
@@ -82,12 +122,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Backend Image
+      - name: Periksa GitHub Secrets
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          docker build -t ghcr.io/${{ env.REPO_LC }}/backend:latest ./backend
-          docker push ghcr.io/${{ env.REPO_LC }}/backend:latest
+          for v in APP_KEY DB_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Secret $v belum dibuat (Settings > Secrets and variables > Actions)"
+              exit 1
+            fi
+          done
+
+      - name: Build Backend Image
+        run: docker build --pull -t ghcr.io/${{ env.REPO_LC }}/backend:${{ github.sha }} ./backend
+
+      - name: Uji jalan Backend Image (memakai GitHub Secrets)
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          docker run --rm -e APP_KEY="$APP_KEY" -e DB_PASSWORD="$DB_PASSWORD" \
+            ghcr.io/${{ env.REPO_LC }}/backend:${{ github.sha }} php artisan --version
+
+      - name: Push Backend Image
+        run: docker push ghcr.io/${{ env.REPO_LC }}/backend:${{ github.sha }}
 
       - name: Build and Push Frontend Image
         run: |
-          docker build -t ghcr.io/${{ env.REPO_LC }}/frontend:latest ./frontend
-          docker push ghcr.io/${{ env.REPO_LC }}/frontend:latest
+          IMAGE=ghcr.io/${{ env.REPO_LC }}/frontend:${{ github.sha }}
+          docker build --pull -t $IMAGE ./frontend
+          docker push $IMAGE
