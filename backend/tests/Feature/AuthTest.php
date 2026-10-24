@@ -27,6 +27,12 @@ class AuthTest extends TestCase
             ->assertStatus(401);
     }
 
+    public function test_login_email_tidak_terdaftar_401(): void
+    {
+        $this->postJson('/api/login', ['email' => 'tidak.ada@example.com', 'password' => 'apa-saja'])
+            ->assertStatus(401);
+    }
+
     public function test_login_validasi_gagal_422(): void
     {
         $this->postJson('/api/login', [])->assertStatus(422);
@@ -40,5 +46,10 @@ class AuthTest extends TestCase
 
         $this->withToken($token)->postJson('/api/logout')->assertStatus(200);
         $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_logout_tanpa_token_401(): void
+    {
+        $this->postJson('/api/logout')->assertStatus(401);
     }
 }
