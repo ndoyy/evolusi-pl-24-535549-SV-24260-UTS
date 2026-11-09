@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Buku;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class BukuController extends Controller
@@ -31,6 +32,13 @@ class BukuController extends Controller
     {
         $buku = Buku::create($this->validated($request));
 
+        Log::info('Buku ditambahkan', [
+            'user_id' => $request->user()->id,
+            'aksi' => 'buku.tambah',
+            'buku_id' => $buku->id,
+            'isbn' => $buku->isbn,
+        ]);
+
         return response()->json(['data' => $buku], 201);
     }
 
@@ -45,13 +53,26 @@ class BukuController extends Controller
     {
         $buku->update($this->validated($request, $buku));
 
+        Log::info('Buku diubah', [
+            'user_id' => $request->user()->id,
+            'aksi' => 'buku.ubah',
+            'buku_id' => $buku->id,
+        ]);
+
         return response()->json(['data' => $buku->fresh()], 200);
     }
 
     /** DELETE /api/buku/{buku} */
-    public function destroy(Buku $buku): JsonResponse
+    public function destroy(Request $request, Buku $buku): JsonResponse
     {
         $buku->delete();
+
+        Log::warning('Buku dihapus', [
+            'user_id' => $request->user()->id,
+            'aksi' => 'buku.hapus',
+            'buku_id' => $buku->id,
+            'sebab' => 'permintaan pengguna (data tidak dapat dikembalikan)',
+        ]);
 
         return response()->json(['message' => 'Buku berhasil dihapus.'], 200);
     }

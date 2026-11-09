@@ -22,8 +22,9 @@ COPY . .
 
 # Bangun ulang autoload untuk kode aplikasi, hapus cache Laravel yang merujuk paket dev,
 # lalu atur izin folder storage dan cache
-RUN composer dump-autoload --no-dev --optimize --no-scripts \
-    && rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php \
+RUN rm -f bootstrap/cache/*.php \
+    && composer dump-autoload --optimize --no-dev --no-scripts \
+    && php artisan package:discover --ansi \
     && chown -R www-data:www-data storage bootstrap/cache
 
 EXPOSE 8000
