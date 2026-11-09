@@ -1,5 +1,13 @@
 # Nilai rahasia (APP_KEY, DB_PASSWORD) dibaca dari file .env di folder ini.
 # File .env tidak ikut di-commit; salin dari .env.example lalu isi.
+
+# Pembatasan ukuran log: tiap container menyimpan maksimal 3 berkas @ 10 MB.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: mysql:8.0
@@ -13,9 +21,11 @@ services:
       - "3307:3306"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 20
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
     networks:
       - app-network
 
@@ -29,6 +39,12 @@ services:
       APP_ENV: local
       APP_DEBUG: "true"
       APP_KEY: ${APP_KEY:?Isi APP_KEY di file .env}
+      # Log Laravel keluar ke stdout (JSON), terbaca lewat `docker compose logs backend`
+      LOG_CHANNEL: stdout
+      LOG_LEVEL: debug
+      # Cache memakai berkas sehingga pemeriksaan /health benar-benar menguji cache,
+      # terpisah dari basis data
+      CACHE_STORE: file
       DB_CONNECTION: mysql
       DB_HOST: db
       DB_PORT: 3306
@@ -38,6 +54,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Memanggil /health: HTTP 200 -> sehat, 503 atau tidak menjawab -> tidak sehat.
+    # (image php:cli tidak punya curl, jadi memakai PHP sendiri)
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/health') === false ? 1 : 0);"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
     networks:
       - app-network
 
@@ -47,7 +72,15 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
     networks:
       - app-network
 
